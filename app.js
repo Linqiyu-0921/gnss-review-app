@@ -293,11 +293,11 @@
     return `
       <div class="flash-card ${view.flashFlipped ? 'flipped' : ''}" id="flash-card">
         <div class="flash-inner">
-          <div class="flash-face flashcard-front">
+          <div class="flash-face">
             <div class="flash-text">${escapeHtml(q.q)}</div>
             <div class="flash-hint">点击卡片查看答案</div>
           </div>
-          <div class="flash-face flashcard-back">
+          <div class="flash-face flash-back">
             <div class="flash-text">${escapeHtml(q.a)}</div>
           </div>
         </div>
@@ -318,12 +318,28 @@
       const input = document.getElementById('fill-input');
       if (!input) return;
       input.focus();
-      input.addEventListener('input', e => { view.fillInput = e.target.value; });
+      // 光标移到末尾
+      const v = view.fillInput || '';
+      try { input.setSelectionRange(v.length, v.length); } catch (e) {}
+      const updateSubmitState = () => {
+        const submit = document.getElementById('btn-submit');
+        if (submit) {
+          const hasVal = view.fillInput.trim().length > 0;
+          submit.disabled = !hasVal;
+          submit.style.opacity = hasVal ? '1' : '0.4';
+        }
+      };
+      input.addEventListener('input', e => {
+        view.fillInput = e.target.value;
+        updateSubmitState();
+      });
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !view.answered) {
+          e.preventDefault();
           submitAnswer();
         }
       });
+      updateSubmitState();
     } else if (q.type === 'flash') {
       const card = document.getElementById('flash-card');
       if (!card) return;
@@ -363,8 +379,12 @@
         document.getElementById('btn-prev').addEventListener('click', prev);
         document.getElementById('btn-submit').addEventListener('click', submitAnswer);
         const submit = document.getElementById('btn-submit');
-        if (q.type === 'choice' && view.selected !== null) submit.disabled = false;
-        if (q.type === 'fill' && view.fillInput.trim()) submit.disabled = false;
+        if (q.type === 'choice' && view.selected !== null) {
+          submit.disabled = false; submit.style.opacity = '1';
+        }
+        if (q.type === 'fill' && view.fillInput.trim()) {
+          submit.disabled = false; submit.style.opacity = '1';
+        }
       } else {
         bar.innerHTML = `
           <button class="btn" id="btn-prev">← 上一题</button>
