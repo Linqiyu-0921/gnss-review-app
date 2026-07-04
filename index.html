@@ -2,166 +2,78 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>GNSS 复习大冒险</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GNSS 考试刷题</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="app">
 
-  <!-- 顶部状态栏 -->
-  <header class="topbar" id="topbar">
-    <div class="stat-item hearts">
-      <span class="stat-icon">❤️</span>
-      <span class="stat-value" id="hearts-display">5</span>
+  <!-- 顶部：题型切换 + 数据 -->
+  <header class="topbar">
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="all">全部</button>
+      <button class="mode-tab" data-mode="choice">选择</button>
+      <button class="mode-tab" data-mode="fill">填空</button>
+      <button class="mode-tab" data-mode="flash">闪卡</button>
     </div>
-    <div class="stat-item streak">
-      <span class="stat-icon">🔥</span>
-      <span class="stat-value" id="streak-display">0</span>
-    </div>
-    <div class="stat-item xp">
-      <span class="stat-icon">⚡</span>
-      <span class="stat-value" id="xp-display">0</span>
-    </div>
-    <div class="stat-item gems">
-      <span class="stat-icon">💎</span>
-      <span class="stat-value" id="gems-display">100</span>
+    <div class="stats">
+      <div class="stat"><span class="stat-num" id="stat-done">0</span><span class="stat-label">已答</span></div>
+      <div class="stat good"><span class="stat-num" id="stat-right">0</span><span class="stat-label">正确</span></div>
+      <div class="stat bad"><span class="stat-num" id="stat-wrong">0</span><span class="stat-label">错误</span></div>
+      <div class="stat starred"><span class="stat-num" id="stat-star">0</span><span class="stat-label">已标</span></div>
     </div>
   </header>
 
-  <!-- 学习路径页面 -->
-  <main class="page page-learn active" id="page-learn">
-    <div class="path-container" id="path-container"></div>
+  <!-- 工具栏：章节过滤 + 操作 -->
+  <div class="toolbar">
+    <select id="chapter-filter" class="select"></select>
+    <button id="btn-shuffle" class="btn btn-ghost" title="乱序">🔀</button>
+    <button id="btn-mark" class="btn btn-ghost" title="标记本题">⭐</button>
+    <button id="btn-show-answer" class="btn btn-ghost" title="显示答案">👁</button>
+    <button id="btn-only-wrong" class="btn btn-ghost btn-toggle" title="只看错题/标记">错题</button>
+    <span class="progress-text"><span id="progress-current">1</span> / <span id="progress-total">0</span></span>
+  </div>
+
+  <!-- 主体：题目区 -->
+  <main class="main" id="main-content">
+    <!-- 题目由 JS 渲染 -->
   </main>
 
-  <!-- 个人资料页面 -->
-  <main class="page page-profile" id="page-profile">
-    <div class="profile-header">
-      <div class="avatar-circle"><span class="avatar-emoji">🛰️</span></div>
-      <h2 class="profile-title">GNSS 学者</h2>
-      <p class="profile-subtitle">坚持学习，征服卫星导航！</p>
+  <!-- 底部：答题操作 -->
+  <div class="bottom-bar" id="bottom-bar">
+    <!-- 由 JS 动态注入 -->
+  </div>
+
+  <!-- 侧边栏：错题本 / 章节正确率 -->
+  <button class="side-btn" id="side-toggle">📋</button>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h3>复习看板</h3>
+      <button class="side-close" id="side-close">×</button>
     </div>
-
-    <div class="stats-row">
-      <div class="big-stat">
-        <div class="big-stat-value" id="total-xp">0</div>
-        <div class="big-stat-label">总经验</div>
+    <div class="sidebar-body">
+      <div class="panel">
+        <h4>章节正确率</h4>
+        <div class="chapter-bars" id="chapter-bars"></div>
       </div>
-      <div class="big-stat">
-        <div class="big-stat-value" id="total-streak">0</div>
-        <div class="big-stat-label">连续天数</div>
+      <div class="panel">
+        <h4>错题本（<span id="wrong-count">0</span>）</h4>
+        <div class="wrong-list" id="wrong-list"></div>
       </div>
-      <div class="big-stat">
-        <div class="big-stat-value" id="lessons-done">0</div>
-        <div class="big-stat-label">完成课程</div>
+      <div class="panel">
+        <h4>已标记（<span id="star-count">0</span>）</h4>
+        <div class="star-list" id="star-list"></div>
       </div>
-    </div>
-
-    <h3 class="section-heading">🏆 成就</h3>
-    <div class="achievements-grid" id="achievements-grid"></div>
-
-    <h3 class="section-heading">📊 章节进度</h3>
-    <div class="chapter-progress-list" id="chapter-progress-list"></div>
-
-    <h3 class="section-heading">📚 PPT 参考</h3>
-    <div class="ppt-grid" id="ppt-grid"></div>
-
-    <h3 class="section-heading">📝 错题本</h3>
-    <div class="wrong-book" id="wrong-book"></div>
-
-    <div class="settings-area">
-      <button class="btn-ghost" id="reset-progress">🔄 重置所有进度</button>
-    </div>
-  </main>
-
-  <!-- 课程练习页面 -->
-  <main class="page page-lesson" id="page-lesson">
-    <div class="lesson-topbar">
-      <button class="btn-close" id="btn-close-lesson"><span>✕</span></button>
-      <div class="lesson-progress-bar">
-        <div class="lesson-progress-fill" id="lesson-progress-fill"></div>
+      <div class="panel">
+        <h4>题目类型分布</h4>
+        <div class="type-stats" id="type-stats"></div>
       </div>
-      <div class="lesson-hearts">
-        <span>❤️</span>
-        <span id="lesson-hearts">5</span>
+      <div class="panel">
+        <button class="btn btn-danger" id="btn-reset">重置所有数据</button>
       </div>
     </div>
-
-    <div class="lesson-content" id="lesson-content">
-      <div class="question-area" id="question-area"></div>
-      <div class="feedback-area" id="feedback-area" style="display:none">
-        <div class="feedback-emoji" id="feedback-emoji"></div>
-        <div class="feedback-title" id="feedback-title"></div>
-        <div class="feedback-detail" id="feedback-detail"></div>
-      </div>
-    </div>
-
-    <div class="check-bar" id="check-bar">
-      <button class="btn-check" id="btn-check" disabled>检查</button>
-    </div>
-    <div class="continue-bar" id="continue-bar" style="display:none">
-      <button class="btn-continue" id="btn-continue">继续</button>
-    </div>
-  </main>
-
-  <!-- 完成页面 -->
-  <main class="page page-complete" id="page-complete">
-    <div class="complete-content">
-      <div class="complete-emoji">🎉</div>
-      <h1 class="complete-title">干得漂亮！</h1>
-      <p class="complete-subtitle">你完成了这节课！</p>
-      <div class="rewards-row">
-        <div class="reward-item">
-          <span class="reward-emoji">⚡</span>
-          <span class="reward-value" id="reward-xp">+0</span>
-          <span class="reward-label">经验值</span>
-        </div>
-        <div class="reward-item">
-          <span class="reward-emoji">🔥</span>
-          <span class="reward-value" id="reward-accuracy">0%</span>
-          <span class="reward-label">正确率</span>
-        </div>
-      </div>
-      <div class="combo-display" id="combo-display" style="display:none">
-        <span class="combo-fire">🔥</span>
-        <span class="combo-text" id="combo-text">连击 x5!</span>
-      </div>
-      <button class="btn-continue-big" id="btn-continue-home">
-        <span>继续</span>
-        <span>→</span>
-      </button>
-    </div>
-  </main>
-
-  <!-- 游戏结束页面 -->
-  <main class="page page-gameover" id="page-gameover">
-    <div class="gameover-content">
-      <div class="gameover-emoji">💔</div>
-      <h1 class="gameover-title">生命值耗尽了！</h1>
-      <p class="gameover-subtitle">别灰心，休息一下再回来吧！</p>
-      <div class="gameover-stats">
-        <div class="go-stat">
-          <span class="go-stat-label">本轮获得</span>
-          <span class="go-stat-value" id="go-xp">0 XP</span>
-        </div>
-      </div>
-      <button class="btn-continue-big btn-retry" id="btn-retry">
-        <span>重新开始</span>
-      </button>
-    </div>
-  </main>
-
-  <!-- 底部导航 -->
-  <nav class="bottom-nav">
-    <button class="nav-item active" data-page="learn">
-      <span class="nav-emoji">🏠</span>
-      <span class="nav-label">学习</span>
-    </button>
-    <button class="nav-item" data-page="profile">
-      <span class="nav-emoji">👤</span>
-      <span class="nav-label">我的</span>
-    </button>
-  </nav>
+  </aside>
 
 </div>
 
