@@ -3,7 +3,7 @@
   'use strict';
 
   const { FLASHCARDS, FILL_BLANK, CHOICES, PPT_CHAPTERS } = window.STUDY_DATA;
-  const STORAGE_KEY = 'gnss_practice_v1';
+  const STORAGE_KEY = 'gnss_practice_v2';
 
   // ===== 数据归一化为统一题库 =====
   const QUESTIONS = [];
@@ -20,16 +20,27 @@
   // ===== 状态 =====
   const state = loadState();
   const view = {
-    mode: 'all',           // all / choice / fill / flash
+    appMode: 'practice',    // practice / memorize
+    mode: 'all',            // all / choice / fill / flash
     chapter: 'all',
-    onlyWrong: false,      // 只看错题
-    onlyStarred: false,    // 只看标记
+    onlyWrong: false,
+    onlyStarred: false,
     idx: 0,
     list: [],
     answered: false,
-    selected: null,        // choice 选中的 idx
+    selected: null,
     fillInput: '',
     flashFlipped: false,
+  };
+  const memView = {
+    chapter: 'all',
+    type: 'all',
+    speed: 8,            // 秒，0=手动
+    idx: 0,
+    list: [],
+    shuffled: false,
+    interval: null,
+    remaining: 0,
   };
 
   function loadState() {
@@ -38,31 +49,60 @@
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return {
-      answered: {},      // {qid: true/false}
-      correct: {},       // {qid: true/false}
-      starred: {},       // {qid: true}
+      answered: {},
+      correct: {},
+      starred: {},
     };
   }
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
-  // ===== 题目列表构建 =====
+  // ===== 刷题模式：题目列表构建 =====
   function buildList() {
     let list = QUESTIONS.slice();
     if (view.mode !== 'all') list = list.filter(q => q.type === view.mode);
     if (view.chapter !== 'all') list = list.filter(q => q.chapter === view.chapter);
-    if (view.onlyWrong) {
-      list = list.filter(q => state.correct[q.id] === false);
-    }
-    if (view.onlyStarred) {
-      list = list.filter(q => state.starred[q.id]);
-    }
+    if (view.onlyWrong) list = list.filter(q => state.correct[q.id] === false);
+    if (view.onlyStarred) list = list.filter(q => state.starred[q.id]);
     if (view.idx >= list.length) view.idx = 0;
     return list;
   }
 
-  // ===== 章节下拉 =====
+  // ===== 顶部模式切换 =====
+  function switchAppMode(mode) {
+    view.appMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.appmode === mode));
+    document.getElementById('practice-controls').style.display = mode === 'practice' ? '' : 'none';
+    document.getElementById('practice-toolbar').style.display = mode === 'practice' ? '' : 'none';
+    document.getElementById('memorize-toolbar').style.display = mode === 'memorize' ? '' : 'none';
+    document.querySelectorAll('.stat').forEach(s => s.style.display = mode === 'practice' ? '' : 'none');
+    if (mode === 'practice') {
+      stopMemoTimer();
+      renderList();
+    } else {
+      renderMemorize();
+    }
+  }
+  document.querySelectorAll('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchAppMode(tab.dataset.appmode));
+  });
+
+  // ===== 刷题模式：题型切换 =====
+  document.querySelectorAll('.inner-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.inner-tab').forEach(t => t.classList.toggle('active', t === tab));
+      view.mode = tab.dataset.mode;
+      view.idx = 0;
+      view.answered = false;
+      view.selected = null;
+      view.fillInput = '';
+      view.flashFlipped = false;
+      renderList();
+    });
+  });
+
+  // ===== 刷题模式：章节下拉 =====
   function initChapterFilter() {
     const sel = document.getElementById('chapter-filter');
     const chapters = ['all', ...new Set(QUESTIONS.map(q => q.chapter))];
@@ -79,21 +119,7 @@
     });
   }
 
-  // ===== 顶部模式切换 =====
-  document.querySelectorAll('.mode-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t === tab));
-      view.mode = tab.dataset.mode;
-      view.idx = 0;
-      view.answered = false;
-      view.selected = null;
-      view.fillInput = '';
-      view.flashFlipped = false;
-      renderList();
-    });
-  });
-
-  // ===== 工具按钮 =====
+  // ===== 刷题模式：工具按钮 =====
   document.getElementById('btn-shuffle').addEventListener('click', () => {
     const list = buildList();
     for (let i = list.length - 1; i > 0; i--) {
@@ -129,7 +155,6 @@
 
   const wrongBtn = document.getElementById('btn-only-wrong');
   wrongBtn.addEventListener('click', () => {
-    // 第一次：只看错题；第二次：只看标记；第三次：全部
     if (!view.onlyWrong && !view.onlyStarred) {
       view.onlyWrong = true; view.onlyStarred = false;
       wrongBtn.textContent = '标记';
@@ -163,7 +188,7 @@
     document.getElementById('stat-star').textContent = star;
   }
 
-  // ===== 渲染题目 =====
+  // ===== 刷题模式：渲染 =====
   function renderList() {
     view.list = buildList();
     render();
@@ -192,13 +217,9 @@
     const typeLabel = { choice: '选择题', fill: '填空题', flash: '闪卡' }[q.type];
 
     let qBody = '';
-    if (q.type === 'choice') {
-      qBody = renderChoice(q);
-    } else if (q.type === 'fill') {
-      qBody = renderFill(q);
-    } else {
-      qBody = renderFlash(q);
-    }
+    if (q.type === 'choice') qBody = renderChoice(q);
+    else if (q.type === 'fill') qBody = renderFill(q);
+    else qBody = renderFlash(q);
 
     main.innerHTML = `
       <div class="q-card">
@@ -215,7 +236,6 @@
 
     bindQuestionEvents(q);
     renderBottomBar(q);
-    // 同步标记按钮状态
     document.getElementById('btn-mark').textContent = state.starred[q.id] ? '★' : '☆';
     document.getElementById('btn-mark').style.color = state.starred[q.id] ? 'var(--yellow)' : '';
   }
@@ -236,9 +256,7 @@
       </button>`;
     });
     html += '</div>';
-    if (view.answered) {
-      html += renderChoiceFeedback(q);
-    }
+    if (view.answered) html += renderChoiceFeedback(q);
     return html;
   }
 
@@ -262,9 +280,7 @@
   function renderFill(q) {
     const userVal = view.fillInput;
     let cls = 'fill-input';
-    if (view.answered) {
-      cls += checkFill(userVal, q.a) ? ' correct' : ' wrong';
-    }
+    if (view.answered) cls += checkFill(userVal, q.a) ? ' correct' : ' wrong';
     return `
       <div class="fill-input-wrap">
         <input type="text" class="${cls}" id="fill-input" placeholder="输入答案..." value="${escapeHtml(userVal)}" ${view.answered ? 'disabled' : ''} autocomplete="off">
@@ -318,7 +334,6 @@
       const input = document.getElementById('fill-input');
       if (!input) return;
       input.focus();
-      // 光标移到末尾
       const v = view.fillInput || '';
       try { input.setSelectionRange(v.length, v.length); } catch (e) {}
       const updateSubmitState = () => {
@@ -329,15 +344,9 @@
           submit.style.opacity = hasVal ? '1' : '0.4';
         }
       };
-      input.addEventListener('input', e => {
-        view.fillInput = e.target.value;
-        updateSubmitState();
-      });
+      input.addEventListener('input', e => { view.fillInput = e.target.value; updateSubmitState(); });
       input.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !view.answered) {
-          e.preventDefault();
-          submitAnswer();
-        }
+        if (e.key === 'Enter' && !view.answered) { e.preventDefault(); submitAnswer(); }
       });
       updateSubmitState();
     } else if (q.type === 'flash') {
@@ -373,18 +382,14 @@
       if (!view.answered) {
         bar.innerHTML = `
           <button class="btn" id="btn-prev" ${view.idx === 0 ? 'disabled style="opacity:0.4"' : ''}>← 上一题</button>
-          <button class="btn btn-primary" id="btn-submit" disabled>提交答案</button>
+          <button class="btn btn-primary" id="btn-submit" disabled style="opacity:0.4">提交答案</button>
           <button class="btn" id="btn-next" disabled style="opacity:0.4">下一题 →</button>
         `;
         document.getElementById('btn-prev').addEventListener('click', prev);
         document.getElementById('btn-submit').addEventListener('click', submitAnswer);
         const submit = document.getElementById('btn-submit');
-        if (q.type === 'choice' && view.selected !== null) {
-          submit.disabled = false; submit.style.opacity = '1';
-        }
-        if (q.type === 'fill' && view.fillInput.trim()) {
-          submit.disabled = false; submit.style.opacity = '1';
-        }
+        if (q.type === 'choice' && view.selected !== null) { submit.disabled = false; submit.style.opacity = '1'; }
+        if (q.type === 'fill' && view.fillInput.trim()) { submit.disabled = false; submit.style.opacity = '1'; }
       } else {
         bar.innerHTML = `
           <button class="btn" id="btn-prev">← 上一题</button>
@@ -399,7 +404,6 @@
   function submitAnswer(forceResult) {
     const q = view.list[view.idx];
     if (!q || view.answered) return;
-
     let correct = false;
     if (q.type === 'choice') {
       if (view.selected === null) return;
@@ -426,7 +430,6 @@
       view.flashFlipped = false;
       render();
     } else {
-      // 列表末：提示并重置 idx
       if (confirm('已是最后一题，回到第一题？')) {
         view.idx = 0;
         view.answered = false;
@@ -442,11 +445,10 @@
     if (view.idx > 0) {
       view.idx--;
       view.answered = state.answered[view.list[view.idx].id] || false;
-      // 恢复选择状态
       const q = view.list[view.idx];
-      if (q.type === 'choice') view.selected = state.answered[q.id] ? q.ans : null;
+      if (q.type === 'choice') view.selected = view.answered ? q.ans : null;
       if (q.type === 'fill') view.fillInput = '';
-      if (q.type === 'flash') view.flashFlipped = state.answered[q.id] || false;
+      if (q.type === 'flash') view.flashFlipped = view.answered || false;
       render();
     }
   }
@@ -456,6 +458,159 @@
     const candidates = answer.split('|').map(s => s.trim().toLowerCase().replace(/\s+/g, ''));
     const norm = user.toLowerCase().replace(/\s+/g, '');
     return candidates.some(c => c === norm || (c.length >= 2 && norm.includes(c)));
+  }
+
+  // ===== 背题模式 =====
+  function buildMemoList() {
+    let list = QUESTIONS.slice();
+    if (memView.chapter !== 'all') list = list.filter(q => q.chapter === memView.chapter);
+    if (memView.type !== 'all') list = list.filter(q => q.type === memView.type);
+    if (memView.shuffled) {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+    }
+    return list;
+  }
+
+  function initMemoControls() {
+    const sel = document.getElementById('mem-chapter');
+    const chapters = ['all', ...new Set(QUESTIONS.map(q => q.chapter))];
+    sel.innerHTML = chapters.map(c => `<option value="${c}">${c === 'all' ? '全部章节' : c}</option>`).join('');
+    sel.addEventListener('change', () => {
+      memView.chapter = sel.value;
+      memView.idx = 0;
+      renderMemorize();
+    });
+
+    const typeSel = document.getElementById('mem-type');
+    typeSel.addEventListener('change', () => {
+      memView.type = typeSel.value;
+      memView.idx = 0;
+      renderMemorize();
+    });
+
+    const speedSel = document.getElementById('mem-speed');
+    speedSel.addEventListener('change', () => {
+      memView.speed = parseInt(speedSel.value);
+      if (memView.speed > 0) startMemoTimer();
+      else stopMemoTimer();
+    });
+
+    document.getElementById('mem-shuffle').addEventListener('click', () => {
+      memView.shuffled = !memView.shuffled;
+      const btn = document.getElementById('mem-shuffle');
+      btn.textContent = memView.shuffled ? '✓乱序' : '🔀';
+      btn.style.color = memView.shuffled ? 'var(--blue)' : '';
+      memView.idx = 0;
+      renderMemorize();
+    });
+  }
+
+  function renderMemorize() {
+    memView.list = buildMemoList();
+    document.getElementById('mem-current').textContent = memView.list.length ? memView.idx + 1 : 0;
+    document.getElementById('mem-total').textContent = memView.list.length;
+
+    const main = document.getElementById('main-content');
+    const bar = document.getElementById('bottom-bar');
+
+    if (memView.list.length === 0) {
+      main.innerHTML = `<div class="q-card"><div style="text-align:center;padding:40px 0;color:var(--muted)">
+        <div style="font-size:48px;margin-bottom:12px">📭</div>
+        没有符合条件的题目<br>
+        <span style="font-size:13px">试试切换章节或题型</span>
+      </div></div>`;
+      bar.innerHTML = '';
+      stopMemoTimer();
+      return;
+    }
+
+    const q = memView.list[memView.idx];
+    const typeLabel = { choice: '选择题', fill: '填空题', flash: '闪卡' }[q.type];
+
+    let extras = '';
+    if (q.type === 'choice') {
+      extras = `<div class="memo-extra"><strong>选项：</strong>${q.opts.map((o, i) => `${String.fromCharCode(65 + i)}. ${escapeHtml(o)}`).join('　')}</div>`;
+      if (q.explain) extras += `<div class="memo-extra">💡 <strong>解析：</strong>${escapeHtml(q.explain)}</div>`;
+    } else if (q.type === 'fill') {
+      extras = `<div class="memo-extra"><strong>填法：</strong>直接给答案，强化记忆</div>`;
+    } else if (q.type === 'flash') {
+      extras = `<div class="memo-extra">💡 <strong>背诵要点：</strong>看清关键词、关键数字、概念辨析</div>`;
+    }
+
+    const timerHtml = memView.speed > 0 ? `
+      <div class="memo-counter">下一题倒计时 <span id="memo-remaining">${memView.speed}</span> 秒</div>
+      <div class="memo-timer"><div class="memo-timer-fill" id="memo-timer-fill" style="width:100%"></div></div>
+    ` : `<div class="memo-counter" style="color:var(--muted)">手动翻页模式</div>`;
+
+    main.innerHTML = `
+      <div class="q-card">
+        <div class="q-meta">
+          <span class="q-chapter">${escapeHtml(q.chapter)}</span>
+          <span class="q-type">${typeLabel}</span>
+          <span class="q-num">#${memView.idx + 1} / ${memView.list.length}</span>
+        </div>
+        <div class="memo-question">${escapeHtml(q.q)}</div>
+        ${timerHtml}
+        <div class="memo-answer">${escapeHtml(q.a)}</div>
+        <div class="memo-extras">${extras}</div>
+      </div>
+    `;
+
+    bar.innerHTML = `
+      <button class="btn" id="memo-prev" ${memView.idx === 0 ? 'disabled style="opacity:0.4"' : ''}>← 上一题</button>
+      <button class="btn btn-primary" id="memo-next">下一题 →</button>
+    `;
+    document.getElementById('memo-prev').addEventListener('click', memoPrev);
+    document.getElementById('memo-next').addEventListener('click', memoNext);
+
+    if (memView.speed > 0) startMemoTimer();
+    else stopMemoTimer();
+  }
+
+  function startMemoTimer() {
+    stopMemoTimer();
+    if (memView.speed <= 0) return;
+    memView.remaining = memView.speed;
+    const start = Date.now();
+    const total = memView.speed * 1000;
+    memView.interval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const left = Math.max(0, memView.speed - elapsed / 1000);
+      const fillEl = document.getElementById('memo-timer-fill');
+      const remainEl = document.getElementById('memo-remaining');
+      if (fillEl) {
+        const pct = Math.max(0, (1 - elapsed / total) * 100);
+        fillEl.style.width = pct + '%';
+        fillEl.classList.toggle('warning', left <= memView.speed * 0.5 && left > memView.speed * 0.25);
+        fillEl.classList.toggle('danger', left <= memView.speed * 0.25);
+      }
+      if (remainEl) remainEl.textContent = Math.ceil(left);
+      if (left <= 0) {
+        memoNext();
+      }
+    }, 100);
+  }
+
+  function stopMemoTimer() {
+    if (memView.interval) {
+      clearInterval(memView.interval);
+      memView.interval = null;
+    }
+  }
+
+  function memoNext() {
+    if (memView.idx < memView.list.length - 1) memView.idx++;
+    else memView.idx = 0;
+    renderMemorize();
+  }
+
+  function memoPrev() {
+    if (memView.idx > 0) memView.idx--;
+    else memView.idx = 0;
+    renderMemorize();
   }
 
   // ===== 侧边栏 =====
@@ -469,12 +624,10 @@
   });
 
   function renderSidebar() {
-    // 章节正确率
     const chapters = ['第一章', '第二章', '第三章', '第四章', '第五章', '第六章', '第七章', '第八章', '名词解释', '18条重点'];
     const bars = document.getElementById('chapter-bars');
     bars.innerHTML = chapters.map(ch => {
       const all = QUESTIONS.filter(q => q.chapter === ch);
-      const total = all.length;
       const answered = all.filter(q => state.answered[q.id]);
       const correct = answered.filter(q => state.correct[q.id] === true).length;
       const rate = answered.length > 0 ? Math.round(correct / answered.length * 100) : 0;
@@ -486,7 +639,6 @@
       </div>`;
     }).join('');
 
-    // 错题本
     const wrongList = document.getElementById('wrong-list');
     const wrongIds = Object.keys(state.correct).filter(k => state.correct[k] === false);
     document.getElementById('wrong-count').textContent = wrongIds.length;
@@ -506,7 +658,6 @@
       });
     }
 
-    // 标记列表
     const starList = document.getElementById('star-list');
     const starIds = Object.keys(state.starred).filter(k => state.starred[k]);
     document.getElementById('star-count').textContent = starIds.length;
@@ -526,7 +677,6 @@
       });
     }
 
-    // 类型统计
     const types = ['choice', 'fill', 'flash'];
     const typeStats = document.getElementById('type-stats');
     typeStats.innerHTML = types.map(t => {
@@ -544,13 +694,12 @@
   }
 
   function jumpTo(qid) {
-    // 切换到该题目所在列表的第一个匹配
     const q = QUESTIONS.find(x => x.id === qid);
     if (!q) return;
-    // 重置筛选但保留 mode
+    if (view.appMode !== 'practice') switchAppMode('practice');
     if (q.type !== view.mode && view.mode !== 'all') {
       view.mode = 'all';
-      document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === 'all'));
+      document.querySelectorAll('.inner-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === 'all'));
     }
     view.chapter = 'all';
     document.getElementById('chapter-filter').value = 'all';
@@ -571,7 +720,6 @@
     sidebar.classList.remove('open');
   }
 
-  // 重置
   document.getElementById('btn-reset').addEventListener('click', () => {
     if (confirm('确定要清空所有答题记录和标记吗？此操作不可恢复。')) {
       state.answered = {};
@@ -583,16 +731,18 @@
     }
   });
 
-  // ===== 工具 =====
   function escapeHtml(s) {
     if (s == null) return '';
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  // ===== 键盘快捷键 =====
   document.addEventListener('keydown', (e) => {
-    // 输入框中不触发
     if (e.target.tagName === 'INPUT') return;
+    if (view.appMode === 'memorize') {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); memoNext(); }
+      else if (e.key === 'ArrowLeft') memoPrev();
+      return;
+    }
     if (e.key === 'ArrowRight') next();
     else if (e.key === 'ArrowLeft') prev();
     else if (e.key === ' ') {
@@ -607,17 +757,14 @@
       const q = view.list[view.idx];
       if (q && q.type === 'choice') {
         const idx = parseInt(e.key) - 1;
-        if (idx < q.opts.length) {
-          view.selected = idx;
-          render();
-        }
+        if (idx < q.opts.length) { view.selected = idx; render(); }
       }
     }
   });
 
-  // ===== 启动 =====
   function init() {
     initChapterFilter();
+    initMemoControls();
     renderList();
   }
   init();

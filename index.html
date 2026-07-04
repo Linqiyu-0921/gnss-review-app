@@ -9,13 +9,17 @@
 <body>
 <div class="app">
 
-  <!-- 顶部：题型切换 + 数据 -->
+  <!-- 顶部：模式 + 题型 + 数据 -->
   <header class="topbar">
     <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="all">全部</button>
-      <button class="mode-tab" data-mode="choice">选择</button>
-      <button class="mode-tab" data-mode="fill">填空</button>
-      <button class="mode-tab" data-mode="flash">闪卡</button>
+      <button class="mode-tab active" data-appmode="practice">刷题</button>
+      <button class="mode-tab" data-appmode="memorize">背题</button>
+    </div>
+    <div id="practice-controls" class="inner-tabs">
+      <button class="inner-tab active" data-mode="all">全部</button>
+      <button class="inner-tab" data-mode="choice">选择</button>
+      <button class="inner-tab" data-mode="fill">填空</button>
+      <button class="inner-tab" data-mode="flash">闪卡</button>
     </div>
     <div class="stats">
       <div class="stat"><span class="stat-num" id="stat-done">0</span><span class="stat-label">已答</span></div>
@@ -26,13 +30,33 @@
   </header>
 
   <!-- 工具栏：章节过滤 + 操作 -->
-  <div class="toolbar">
+  <div id="practice-toolbar" class="toolbar">
     <select id="chapter-filter" class="select"></select>
     <button id="btn-shuffle" class="btn btn-ghost" title="乱序">🔀</button>
     <button id="btn-mark" class="btn btn-ghost" title="标记本题">⭐</button>
     <button id="btn-show-answer" class="btn btn-ghost" title="显示答案">👁</button>
     <button id="btn-only-wrong" class="btn btn-ghost btn-toggle" title="只看错题/标记">错题</button>
     <span class="progress-text"><span id="progress-current">1</span> / <span id="progress-total">0</span></span>
+  </div>
+
+  <!-- 背题模式工具栏 -->
+  <div id="memorize-toolbar" class="toolbar" style="display:none">
+    <select id="mem-chapter" class="select"></select>
+    <select id="mem-type" class="select" style="max-width:120px">
+      <option value="all">全部题型</option>
+      <option value="choice">选择题</option>
+      <option value="fill">填空题</option>
+      <option value="flash">闪卡</option>
+    </select>
+    <select id="mem-speed" class="select" style="max-width:130px" title="自动翻页间隔">
+      <option value="0">手动翻页</option>
+      <option value="5">每题 5 秒</option>
+      <option value="8" selected>每题 8 秒</option>
+      <option value="12">每题 12 秒</option>
+      <option value="20">每题 20 秒</option>
+    </select>
+    <button id="mem-shuffle" class="btn btn-ghost" title="乱序">🔀</button>
+    <span class="progress-text"><span id="mem-current">1</span> / <span id="mem-total">0</span></span>
   </div>
 
   <!-- 主体：题目区 -->
