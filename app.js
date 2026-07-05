@@ -703,6 +703,18 @@
             <div class="hw-section-label">考法</div>
             <div class="hw-section-content">${escapeHtml(item.exam)}</div>
           </div>
+          <div class="hw-section-row ans">
+            <div class="hw-section-label">答案</div>
+            <div class="hw-section-content">${escapeHtml(item.answer || '本题暂无标准答案')}</div>
+          </div>
+          <div class="hw-section-row method">
+            <div class="hw-section-label">答法</div>
+            <div class="hw-section-content">${escapeHtml(item.method || '——')}</div>
+          </div>
+          <div class="hw-section-row trap">
+            <div class="hw-section-label">陷阱</div>
+            <div class="hw-section-content">${escapeHtml(item.trap || '——')}</div>
+          </div>
         </div>
       </div>
     `;

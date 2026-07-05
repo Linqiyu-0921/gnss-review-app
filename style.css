@@ -526,7 +526,7 @@ html, body {
 .hw-section-row {
   display: flex;
   gap: 14px;
-  padding: 12px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--primary-soft);
 }
 .hw-section-row:last-child { border-bottom: none; }
@@ -551,6 +551,9 @@ html, body {
 .hw-section-row.def .hw-section-label::before { background: #2563eb; }
 .hw-section-row.prin .hw-section-label::before { background: #9333ea; }
 .hw-section-row.exam .hw-section-label::before { background: #c2410c; }
+.hw-section-row.ans .hw-section-label::before { background: #059669; }
+.hw-section-row.method .hw-section-label::before { background: #0891b2; }
+.hw-section-row.trap .hw-section-label::before { background: #dc2626; }
 
 .hw-section-content {
   flex: 1;
