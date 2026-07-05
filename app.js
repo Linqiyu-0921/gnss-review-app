@@ -35,12 +35,9 @@
   const memView = {
     chapter: 'all',
     type: 'all',
-    speed: 8,            // 秒，0=手动
     idx: 0,
     list: [],
     shuffled: false,
-    interval: null,
-    remaining: 0,
   };
   const hwView = {
     chapter: 'all',
@@ -86,12 +83,10 @@
     document.getElementById('handwritten-toolbar').style.display = mode === 'handwritten' ? '' : 'none';
     document.getElementById('stats-bar').style.display = mode === 'practice' ? '' : 'none';
     if (mode === 'practice') {
-      stopMemoTimer();
       renderList();
     } else if (mode === 'memorize') {
       renderMemorize();
     } else if (mode === 'handwritten') {
-      stopMemoTimer();
       renderHandwritten();
     }
   }
@@ -503,11 +498,11 @@
     });
 
     const speedSel = document.getElementById('mem-speed');
-    speedSel.addEventListener('change', () => {
-      memView.speed = parseInt(speedSel.value);
-      if (memView.speed > 0) startMemoTimer();
-      else stopMemoTimer();
-    });
+    if (speedSel) {
+      speedSel.addEventListener('change', () => {
+        // 已移除倒计时
+      });
+    }
 
     document.getElementById('mem-shuffle').addEventListener('click', () => {
       memView.shuffled = !memView.shuffled;
@@ -534,27 +529,35 @@
         <span style="font-size:13px">试试切换章节或题型</span>
       </div></div>`;
       bar.innerHTML = '';
-      stopMemoTimer();
       return;
     }
 
     const q = memView.list[memView.idx];
     const typeLabel = { choice: '选择题', fill: '填空题', flash: '闪卡' }[q.type];
 
+    // 提取关键数字/术语作为考点标注
+    const keywords = extractKeywords(q);
+    const keywordHtml = keywords.length
+      ? `<div class="memo-keywords">🔑 <strong>考点标注：</strong>${keywords.map(k => `<span class="kw-tag">${escapeHtml(k)}</span>`).join('')}</div>`
+      : '';
+
     let extras = '';
     if (q.type === 'choice') {
       extras = `<div class="memo-extra"><strong>选项：</strong>${q.opts.map((o, i) => `${String.fromCharCode(65 + i)}. ${escapeHtml(o)}`).join('　')}</div>`;
       if (q.explain) extras += `<div class="memo-extra">💡 <strong>解析：</strong>${escapeHtml(q.explain)}</div>`;
+      extras += `<div class="memo-extra method">📝 <strong>答法：</strong>圈出题干关键词（"最少/最/不属于"），对比选项差异项，优先选含数字最多的。</div>`;
     } else if (q.type === 'fill') {
-      extras = `<div class="memo-extra"><strong>填法：</strong>直接给答案，强化记忆</div>`;
+      const blankCount = (q.q.match(/_{2,}/g) || []).length;
+      const methodTip = blankCount > 1
+        ? `📝 <strong>答法：</strong>共${blankCount}空，按空格顺序逐空写。地名/单位/数字注意大小写、空格。`
+        : `📝 <strong>答法：</strong>直接写答案。单位（m/km/s）、缩写（GPS/WGS-84）、数字精度要准。`;
+      extras = `<div class="memo-extra">${methodTip}</div>`;
+      // 填空题若有 hint 字段则显示
+      if (q.hint) extras += `<div class="memo-extra">💡 <strong>提示：</strong>${escapeHtml(q.hint)}</div>`;
     } else if (q.type === 'flash') {
-      extras = `<div class="memo-extra">💡 <strong>背诵要点：</strong>看清关键词、关键数字、概念辨析</div>`;
+      extras = `<div class="memo-extra method">📝 <strong>答法：</strong>看清概念辨析（"X与Y的区别"），从关键词触发记忆，列出关键数字。</div>`;
+      if (q.explain) extras += `<div class="memo-extra">💡 <strong>思路：</strong>${escapeHtml(q.explain)}</div>`;
     }
-
-    const timerHtml = memView.speed > 0 ? `
-      <div class="memo-counter">下一题倒计时 <span id="memo-remaining">${memView.speed}</span> 秒</div>
-      <div class="memo-timer"><div class="memo-timer-fill" id="memo-timer-fill" style="width:100%"></div></div>
-    ` : `<div class="memo-counter" style="color:var(--muted)">手动翻页模式</div>`;
 
     main.innerHTML = `
       <div class="q-card">
@@ -564,7 +567,7 @@
           <span class="q-num">#${memView.idx + 1} / ${memView.list.length}</span>
         </div>
         <div class="memo-question">${escapeHtml(q.q)}</div>
-        ${timerHtml}
+        ${keywordHtml}
         <div class="memo-answer">${escapeHtml(q.a)}</div>
         <div class="memo-extras">${extras}</div>
       </div>
@@ -576,40 +579,19 @@
     `;
     document.getElementById('memo-prev').addEventListener('click', memoPrev);
     document.getElementById('memo-next').addEventListener('click', memoNext);
-
-    if (memView.speed > 0) startMemoTimer();
-    else stopMemoTimer();
   }
 
-  function startMemoTimer() {
-    stopMemoTimer();
-    if (memView.speed <= 0) return;
-    memView.remaining = memView.speed;
-    const start = Date.now();
-    const total = memView.speed * 1000;
-    memView.interval = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const left = Math.max(0, memView.speed - elapsed / 1000);
-      const fillEl = document.getElementById('memo-timer-fill');
-      const remainEl = document.getElementById('memo-remaining');
-      if (fillEl) {
-        const pct = Math.max(0, (1 - elapsed / total) * 100);
-        fillEl.style.width = pct + '%';
-        fillEl.classList.toggle('warning', left <= memView.speed * 0.5 && left > memView.speed * 0.25);
-        fillEl.classList.toggle('danger', left <= memView.speed * 0.25);
-      }
-      if (remainEl) remainEl.textContent = Math.ceil(left);
-      if (left <= 0) {
-        memoNext();
-      }
-    }, 100);
-  }
-
-  function stopMemoTimer() {
-    if (memView.interval) {
-      clearInterval(memView.interval);
-      memView.interval = null;
-    }
+  // 从题目/答案中提取关键数字与术语
+  function extractKeywords(q) {
+    const text = (q.q || '') + ' ' + (q.a || '');
+    const kws = [];
+    // 数字+单位
+    const numUnit = text.match(/\d+(?:\.\d+)?\s*(?:km|m|cm|mm|°|度|分|秒|h|min|s|MHz|GHz|ppm|dB)\b/gi) || [];
+    numUnit.slice(0, 4).forEach(n => kws.push(n));
+    // GPS/WGS-84/NMEA 等专业缩写
+    const acros = text.match(/\b(?:GPS|GLONASS|Galileo|BDS|WGS-?84|CGCS2000|ITRF|TAI|UTC|GPST|BDT|RTK|PPP|PRN|C\/A|P码|ITRF)\b/g) || [];
+    acros.slice(0, 3).forEach(a => { if (!kws.includes(a)) kws.push(a); });
+    return kws.slice(0, 5);
   }
 
   function memoNext() {

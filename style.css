@@ -439,32 +439,33 @@ html, body {
   line-height: 1.6;
   color: var(--text);
 }
+.memo-extra.method { border-left-color: #0891b2; background: #ecfeff; }
+.memo-extra.method strong { color: #0891b2 !important; }
+.memo-keywords {
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+  border: 1px solid #fbbf24;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.memo-keywords strong { color: #c2410c; }
+.kw-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 2px 4px;
+  background: white;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #c2410c;
+}
+}
 .memo-extra strong { color: var(--blue); }
 
-/* 倒计时进度条 */
-.memo-timer {
-  height: 4px;
-  background: var(--primary-soft);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-.memo-timer-fill {
-  height: 100%;
-  background: var(--blue);
-  transition: width 0.1s linear;
-  width: 100%;
-}
-.memo-timer-fill.warning { background: var(--yellow); }
-.memo-timer-fill.danger { background: var(--red); }
-
-.memo-counter {
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 8px;
-  font-variant-numeric: tabular-nums;
-}
+/* 倒计时进度条（已禁用） */
 
 /* ===== 手写重点模式 ===== */
 .hw-card {
