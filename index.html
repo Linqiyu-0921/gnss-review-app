@@ -14,6 +14,7 @@
     <div class="mode-tabs">
       <button class="mode-tab active" data-appmode="practice">刷题</button>
       <button class="mode-tab" data-appmode="memorize">背题</button>
+      <button class="mode-tab" data-appmode="handwritten">手写重点</button>
     </div>
     <div id="practice-controls" class="inner-tabs">
       <button class="inner-tab active" data-mode="all">全部</button>
@@ -21,7 +22,7 @@
       <button class="inner-tab" data-mode="fill">填空</button>
       <button class="inner-tab" data-mode="flash">闪卡</button>
     </div>
-    <div class="stats">
+    <div class="stats" id="stats-bar">
       <div class="stat"><span class="stat-num" id="stat-done">0</span><span class="stat-label">已答</span></div>
       <div class="stat good"><span class="stat-num" id="stat-right">0</span><span class="stat-label">正确</span></div>
       <div class="stat bad"><span class="stat-num" id="stat-wrong">0</span><span class="stat-label">错误</span></div>
@@ -57,6 +58,14 @@
     </select>
     <button id="mem-shuffle" class="btn btn-ghost" title="乱序">🔀</button>
     <span class="progress-text"><span id="mem-current">1</span> / <span id="mem-total">0</span></span>
+  </div>
+
+  <!-- 手写重点工具栏 -->
+  <div id="handwritten-toolbar" class="toolbar" style="display:none">
+    <select id="hw-chapter" class="select"></select>
+    <button id="hw-shuffle" class="btn btn-ghost" title="乱序">🔀</button>
+    <button id="hw-mark" class="btn btn-ghost" title="标记重点">⭐</button>
+    <span class="progress-text"><span id="hw-current">1</span> / <span id="hw-total">0</span></span>
   </div>
 
   <!-- 主体：题目区 -->

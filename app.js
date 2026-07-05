@@ -2,7 +2,7 @@
 (function() {
   'use strict';
 
-  const { FLASHCARDS, FILL_BLANK, CHOICES, PPT_CHAPTERS } = window.STUDY_DATA;
+  const { FLASHCARDS, FILL_BLANK, CHOICES, PPT_CHAPTERS, HANDWRITTEN_NOTES } = window.STUDY_DATA;
   const STORAGE_KEY = 'gnss_practice_v2';
 
   // ===== 数据归一化为统一题库 =====
@@ -42,6 +42,12 @@
     interval: null,
     remaining: 0,
   };
+  const hwView = {
+    chapter: 'all',
+    idx: 0,
+    list: [],
+    shuffled: false,
+  };
 
   function loadState() {
     try {
@@ -52,6 +58,7 @@
       answered: {},
       correct: {},
       starred: {},
+      hwStarred: {},   // 手写重点标记
     };
   }
   function saveState() {
@@ -76,12 +83,16 @@
     document.getElementById('practice-controls').style.display = mode === 'practice' ? '' : 'none';
     document.getElementById('practice-toolbar').style.display = mode === 'practice' ? '' : 'none';
     document.getElementById('memorize-toolbar').style.display = mode === 'memorize' ? '' : 'none';
-    document.querySelectorAll('.stat').forEach(s => s.style.display = mode === 'practice' ? '' : 'none');
+    document.getElementById('handwritten-toolbar').style.display = mode === 'handwritten' ? '' : 'none';
+    document.getElementById('stats-bar').style.display = mode === 'practice' ? '' : 'none';
     if (mode === 'practice') {
       stopMemoTimer();
       renderList();
-    } else {
+    } else if (mode === 'memorize') {
       renderMemorize();
+    } else if (mode === 'handwritten') {
+      stopMemoTimer();
+      renderHandwritten();
     }
   }
   document.querySelectorAll('.mode-tab').forEach(tab => {
@@ -613,6 +624,112 @@
     renderMemorize();
   }
 
+  // ===== 手写重点模式 =====
+  function buildHandwrittenList() {
+    let list = HANDWRITTEN_NOTES.slice();
+    if (hwView.chapter !== 'all') list = list.filter(h => h.chapter === hwView.chapter);
+    if (hwView.shuffled) {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+    }
+    return list;
+  }
+
+  function initHandwrittenControls() {
+    const sel = document.getElementById('hw-chapter');
+    const chapters = ['all', ...new Set(HANDWRITTEN_NOTES.map(h => h.chapter))];
+    sel.innerHTML = chapters.map(c => `<option value="${c}">${c === 'all' ? '全部章节' : c}</option>`).join('');
+    sel.addEventListener('change', () => {
+      hwView.chapter = sel.value;
+      hwView.idx = 0;
+      renderHandwritten();
+    });
+    document.getElementById('hw-shuffle').addEventListener('click', () => {
+      hwView.shuffled = !hwView.shuffled;
+      const btn = document.getElementById('hw-shuffle');
+      btn.textContent = hwView.shuffled ? '✓乱序' : '🔀';
+      btn.style.color = hwView.shuffled ? 'var(--blue)' : '';
+      hwView.idx = 0;
+      renderHandwritten();
+    });
+    document.getElementById('hw-mark').addEventListener('click', () => {
+      const item = hwView.list[hwView.idx];
+      if (!item) return;
+      if (state.hwStarred[item.id]) delete state.hwStarred[item.id];
+      else state.hwStarred[item.id] = true;
+      saveState();
+      renderHandwritten();
+    });
+  }
+
+  function renderHandwritten() {
+    hwView.list = buildHandwrittenList();
+    document.getElementById('hw-current').textContent = hwView.list.length ? hwView.idx + 1 : 0;
+    document.getElementById('hw-total').textContent = hwView.list.length;
+
+    const main = document.getElementById('main-content');
+    const bar = document.getElementById('bottom-bar');
+
+    if (hwView.list.length === 0) {
+      main.innerHTML = `<div class="hw-empty"><div class="hw-empty-icon">📝</div>该章节暂无手写重点</div>`;
+      bar.innerHTML = '';
+      return;
+    }
+
+    const item = hwView.list[hwView.idx];
+    const starred = state.hwStarred[item.id];
+
+    main.innerHTML = `
+      <div class="hw-card">
+        <div class="hw-header">
+          <span class="hw-chapter-tag">${escapeHtml(item.chapter)}</span>
+          <span class="hw-section">${escapeHtml(item.section)}</span>
+          <span class="hw-num">#${hwView.idx + 1} / ${hwView.list.length}</span>
+          ${starred ? '<span class="hw-star">⭐</span>' : ''}
+        </div>
+        <div class="hw-concept">${escapeHtml(item.concept)}</div>
+        <div class="hw-sections">
+          <div class="hw-section-row def">
+            <div class="hw-section-label">定义</div>
+            <div class="hw-section-content">${escapeHtml(item.definition)}</div>
+          </div>
+          <div class="hw-section-row prin">
+            <div class="hw-section-label">原理</div>
+            <div class="hw-section-content">${escapeHtml(item.principle)}</div>
+          </div>
+          <div class="hw-section-row exam">
+            <div class="hw-section-label">考法</div>
+            <div class="hw-section-content">${escapeHtml(item.exam)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    bar.innerHTML = `
+      <button class="btn" id="hw-prev" ${hwView.idx === 0 ? 'disabled style="opacity:0.4"' : ''}>← 上一条</button>
+      <button class="btn btn-primary" id="hw-next">下一条 →</button>
+    `;
+    document.getElementById('hw-prev').addEventListener('click', hwPrev);
+    document.getElementById('hw-next').addEventListener('click', hwNext);
+
+    document.getElementById('hw-mark').textContent = starred ? '★' : '☆';
+    document.getElementById('hw-mark').style.color = starred ? 'var(--yellow)' : '';
+  }
+
+  function hwNext() {
+    if (hwView.idx < hwView.list.length - 1) hwView.idx++;
+    else hwView.idx = 0;
+    renderHandwritten();
+  }
+
+  function hwPrev() {
+    if (hwView.idx > 0) hwView.idx--;
+    else hwView.idx = 0;
+    renderHandwritten();
+  }
+
   // ===== 侧边栏 =====
   const sidebar = document.getElementById('sidebar');
   document.getElementById('side-toggle').addEventListener('click', () => {
@@ -743,6 +860,11 @@
       else if (e.key === 'ArrowLeft') memoPrev();
       return;
     }
+    if (view.appMode === 'handwritten') {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); hwNext(); }
+      else if (e.key === 'ArrowLeft') hwPrev();
+      return;
+    }
     if (e.key === 'ArrowRight') next();
     else if (e.key === 'ArrowLeft') prev();
     else if (e.key === ' ') {
@@ -765,6 +887,7 @@
   function init() {
     initChapterFilter();
     initMemoControls();
+    initHandwrittenControls();
     renderList();
   }
   init();
